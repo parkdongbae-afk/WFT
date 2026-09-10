@@ -24,12 +24,18 @@ public partial class FloatingBarWindow : Window
     private nint _lastActiveHwnd;
     private bool _lastActiveIsBrowser;
     private bool _collapsed;
-    private bool _nativeDragStarted;
-    private Point _dragStart;
-    private double _dragStartL, _dragStartT;
+    private bool _dragActive;
+    private bool _dragMoving;
+    private Point _dragAnchor;
+    private Point _dragLast;
+    private double _dragThreshold;
+    private bool _dragTapExpands;
+    private double _grabOffsetX, _grabOffsetY;
     private readonly DispatcherTimer _longPressTimer = new() { Interval = TimeSpan.FromMilliseconds(500) };
     private bool _longPressFired;
-    private UIElement? _captureElement;
+    private UIElement? _dragElement;
+    private DateTime _lastTapTime = DateTime.MinValue;
+    private Point _lastTapPoint;
 
     private StackPanel _expandedPanel = null!;
     private StackPanel _actionPanel = null!;
@@ -51,8 +57,8 @@ public partial class FloatingBarWindow : Window
         _longPressTimer.Tick += (_, _) =>
         {
             _longPressTimer.Stop();
-            var now = Mouse.GetPosition(this);
-            if (Math.Abs(now.X - _dragStart.X) + Math.Abs(now.Y - _dragStart.Y) > 10) return;
+            if (!_dragActive) return;
+            if (Math.Abs(_dragLast.X - _dragAnchor.X) + Math.Abs(_dragLast.Y - _dragAnchor.Y) > 10) return;
             _longPressFired = true;
             Popup.ShowOpacitySlider(this);
         };
@@ -61,7 +67,7 @@ public partial class FloatingBarWindow : Window
         MouseLeave += (_, _) => ApplyOpacity();
 
         _fgTimer.Tick += (_, _) => TrackForeground();
-        _topTimer.Tick += (_, _) => { if (!_nativeDragStarted) NativeMethods.ReassertTopmost(Hwnd); };
+        _topTimer.Tick += (_, _) => { if (!_dragMoving) NativeMethods.ReassertTopmost(Hwnd); };
     }
 
     private void OnSourceInitialized(object? s, EventArgs e)
@@ -129,8 +135,9 @@ public partial class FloatingBarWindow : Window
         var gripContent = MakeGripIcon(vertical, bs);
         var grip = new Border
         {
-            Width = vertical ? bs : 30,
-            Height = vertical ? 30 : bs,
+            Width = vertical ? bs : 44,
+            Height = vertical ? 44 : bs,
+            Background = Brushes.Transparent,
             Child = gripContent,
             Cursor = Cursors.SizeAll,
             ToolTip = "끌어서 옮기기 · 두 번 탭하면 접기 · 길게 누르면 투명도"
@@ -255,41 +262,94 @@ public partial class FloatingBarWindow : Window
         SavePosition();
     }
 
-    private const int WM_NCLBUTTONDOWN = 0x00A1;
-    private const nint HTCAPTION = 0x2;
-
     private void AttachDragHandlers(UIElement el, bool tapExpands = false)
     {
+        Stylus.SetIsPressAndHoldEnabled(el, false);
+        Stylus.SetIsFlicksEnabled(el, false);
+
         el.PreviewMouseLeftButtonDown += (s, e) =>
         {
             if (e.ChangedButton != MouseButton.Left) return;
-            if (e.ClickCount >= 2 && !tapExpands) { ToggleCollapse(); e.Handled = true; return; }
-            BeginDrag(el, tapExpands, e);
+            DragPointerDown(el, tapExpands, e.GetPosition(this), 6);
+            el.CaptureMouse();
             e.Handled = true;
         };
-        el.PreviewMouseMove += (s, e) => MoveDrag(e);
-        el.PreviewMouseLeftButtonUp += (s, e) => EndDrag(tapExpands);
+        el.PreviewMouseMove += (s, e) =>
+        {
+            if (!_dragActive || e.LeftButton != MouseButtonState.Pressed) return;
+            DragPointerMove(e.GetPosition(this));
+        };
+        el.PreviewMouseLeftButtonUp += (s, e) =>
+        {
+            if (!_dragActive) return;
+            DragPointerUp(e.GetPosition(this));
+            el.ReleaseMouseCapture();
+            e.Handled = true;
+        };
+        el.LostMouseCapture += (s, e) => DragAbandoned();
+
+        el.PreviewTouchDown += (s, e) =>
+        {
+            DragPointerDown(el, tapExpands, e.GetTouchPoint(this).Position, 14);
+            e.TouchDevice.Capture(el);
+            e.Handled = true;
+        };
+        el.PreviewTouchMove += (s, e) =>
+        {
+            if (!_dragActive) return;
+            DragPointerMove(e.GetTouchPoint(this).Position);
+            e.Handled = true;
+        };
+        el.PreviewTouchUp += (s, e) =>
+        {
+            if (!_dragActive) return;
+            DragPointerUp(e.GetTouchPoint(this).Position);
+            e.TouchDevice.Capture(null);
+            e.Handled = true;
+        };
+        el.LostTouchCapture += (s, e) => DragAbandoned();
+
+        el.PreviewStylusDown += (s, e) =>
+        {
+            if (e.StylusDevice.TabletDevice.Type != TabletDeviceType.Stylus) return;
+            DragPointerDown(el, tapExpands, e.GetPosition(this), 14);
+            e.StylusDevice.Capture(el);
+            e.Handled = true;
+        };
+        el.PreviewStylusMove += (s, e) =>
+        {
+            if (e.StylusDevice.TabletDevice.Type != TabletDeviceType.Stylus || !_dragActive) return;
+            DragPointerMove(e.GetPosition(this));
+            e.Handled = true;
+        };
+        el.PreviewStylusUp += (s, e) =>
+        {
+            if (e.StylusDevice.TabletDevice.Type != TabletDeviceType.Stylus || !_dragActive) return;
+            DragPointerUp(e.GetPosition(this));
+            e.StylusDevice.Capture(null);
+            e.Handled = true;
+        };
+        el.LostStylusCapture += (s, e) => DragAbandoned();
     }
 
-    private void BeginDrag(UIElement? el, bool tapExpands, MouseButtonEventArgs e)
+    private void DragPointerDown(UIElement el, bool tapExpands, Point p, double threshold)
     {
-        _dragStart = e.GetPosition(this);
-        _dragStartL = Left; _dragStartT = Top;
-        _nativeDragStarted = false;
+        if (_dragActive) return;
+        _dragActive = true;
+        _dragMoving = false;
+        _dragElement = el;
+        _dragTapExpands = tapExpands;
+        _dragAnchor = p;
+        _dragLast = p;
+        _dragThreshold = threshold;
         _longPressFired = false;
-        _captureElement = el;
         if (!tapExpands) _longPressTimer.Start();
     }
 
-    private void MoveDrag(MouseEventArgs e)
+    private void DragPointerMove(Point p)
     {
-        if (_captureElement == null || e.LeftButton != MouseButtonState.Pressed) return;
-        if (_nativeDragStarted) return;
-
-        var p = e.GetPosition(this);
-        double dx = p.X - _dragStart.X, dy = p.Y - _dragStart.Y;
-        double dist = Math.Abs(dx) + Math.Abs(dy);
-
+        if (!_dragActive) return;
+        double dist = Math.Abs(p.X - _dragAnchor.X) + Math.Abs(p.Y - _dragAnchor.Y);
         if (dist > 3) _longPressTimer.Stop();
 
         if (_longPressFired)
@@ -302,43 +362,93 @@ public partial class FloatingBarWindow : Window
             else return;
         }
 
-        if (dist > 6)
+        if (!_dragMoving && dist > _dragThreshold)
         {
-            _nativeDragStarted = true;
-            NativeMethods.SendMessage(Hwnd, WM_NCLBUTTONDOWN, HTCAPTION, nint.Zero);
-            OnNativeDragEnded();
+            _dragMoving = true;
+            Popup.Close();
+            Point sp = PointToScreen(p);
+            if (NativeMethods.GetWindowRect(Hwnd, out var r))
+            {
+                _grabOffsetX = r.Left - sp.X;
+                _grabOffsetY = r.Top - sp.Y;
+            }
+            else
+            {
+                double s0 = DeviceScale();
+                _grabOffsetX = Left * s0 - sp.X;
+                _grabOffsetY = Top * s0 - sp.Y;
+            }
+        }
+        if (_dragMoving)
+        {
+            Point sp = PointToScreen(p);
+            MoveDragWindowTo(sp.X + _grabOffsetX, sp.Y + _grabOffsetY);
         }
     }
 
-    private void OnNativeDragEnded()
+    private void MoveDragWindowTo(double physX, double physY)
     {
-        SetPositionClamped(Left, Top);
-        SavePosition();
-        _nativeDragStarted = false;
-        _captureElement = null;
-        if (NativeMethods.GetCursorPos(out var p))
-        {
-            var pt = new NativeMethods.POINT { X = p.X, Y = p.Y };
-            NativeMethods.ScreenToClient(Hwnd, ref pt);
-            nint lp = (nint)(((pt.Y & 0xFFFF) << 16) | (pt.X & 0xFFFF));
-            NativeMethods.PostMessage(Hwnd, 0x0202 /*WM_LBUTTONUP*/, 0, lp);
-        }
+        double s = DeviceScale();
+        double xd = physX / s, yd = physY / s;
+        (xd, yd) = ClampDragPosition(xd, yd, magnet: false);
+        NativeMethods.SetWindowPos(Hwnd, nint.Zero,
+            (int)Math.Round(xd * s), (int)Math.Round(yd * s), 0, 0,
+            NativeMethods.SWP_NOSIZE | NativeMethods.SWP_NOZORDER | NativeMethods.SWP_NOACTIVATE);
     }
 
-    private void EndDrag(bool tapExpands)
+    private double DeviceScale()
+    {
+        var src = PresentationSource.FromVisual(this);
+        double s = src?.CompositionTarget?.TransformToDevice.M11 ?? 0;
+        return s > 0 ? s : 1.0;
+    }
+
+    private void SyncWindowPosition()
+    {
+        if (!NativeMethods.GetWindowRect(Hwnd, out var r)) return;
+        var m = PresentationSource.FromVisual(this)?.CompositionTarget?.TransformFromDevice;
+        if (m != null) { Left = r.Left * m.Value.M11; Top = r.Top * m.Value.M22; }
+        else { Left = r.Left; Top = r.Top; }
+    }
+
+    private void DragPointerUp(Point p)
     {
         _longPressTimer.Stop();
-        if (_captureElement == null) return; // 이 요소에서 누르지 않은 업 이벤트는 무시
+        if (!_dragActive) return;
+        bool moved = _dragMoving;
         bool longFired = _longPressFired;
-        bool wasNative = _nativeDragStarted;
-        _captureElement = null;
+        _dragActive = false;
+        _dragMoving = false;
+        _dragElement = null;
         _longPressFired = false;
 
-        if (wasNative) return;
-        if (tapExpands && !longFired) ToggleCollapse();
+        if (moved) { SyncWindowPosition(); SetPositionClamped(Left, Top); SavePosition(); return; }
+        if (longFired) return;
+
+        if (_dragTapExpands) { ToggleCollapse(); return; }
+
+        var now = DateTime.Now;
+        bool doubleTap = (now - _lastTapTime).TotalMilliseconds <= 500
+            && Math.Abs(p.X - _lastTapPoint.X) <= 30
+            && Math.Abs(p.Y - _lastTapPoint.Y) <= 30;
+        _lastTapTime = doubleTap ? DateTime.MinValue : now;
+        _lastTapPoint = p;
+        if (doubleTap) ToggleCollapse();
     }
 
-    private void SetPositionClamped(double x, double y)
+    private void DragAbandoned()
+    {
+        _longPressTimer.Stop();
+        if (!_dragActive) return;
+        bool moved = _dragMoving;
+        _dragActive = false;
+        _dragMoving = false;
+        _dragElement = null;
+        _longPressFired = false;
+        if (moved) { SyncWindowPosition(); SetPositionClamped(Left, Top); SavePosition(); }
+    }
+
+    private (double x, double y) ClampDragPosition(double x, double y, bool magnet = true)
     {
         double vl = SystemParameters.VirtualScreenLeft, vt = SystemParameters.VirtualScreenTop;
         double vw = SystemParameters.VirtualScreenWidth, vh = SystemParameters.VirtualScreenHeight;
@@ -350,11 +460,19 @@ public partial class FloatingBarWindow : Window
         x = Math.Clamp(x, vl - w + minVisible, vl + vw - minVisible);
         y = Math.Clamp(y, vt - h + minVisible, vt + vh - minVisible);
 
-        // 모서리 근접 스냅 (12px)
-        if (Math.Abs(x - vl) <= 12) x = vl;
-        if (Math.Abs(x + w - (vl + vw)) <= 12) x = vl + vw - w;
-        if (Math.Abs(y - vt) <= 12) y = vt;
+        if (magnet)
+        {
+            if (Math.Abs(x - vl) <= 12) x = vl;
+            if (Math.Abs(x + w - (vl + vw)) <= 12) x = vl + vw - w;
+            if (Math.Abs(y - vt) <= 12) y = vt;
+        }
 
+        return (x, y);
+    }
+
+    private void SetPositionClamped(double x, double y)
+    {
+        (x, y) = ClampDragPosition(x, y);
         Left = x; Top = y;
     }
 

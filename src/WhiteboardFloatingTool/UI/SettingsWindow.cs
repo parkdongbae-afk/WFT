@@ -51,6 +51,7 @@ public sealed class SettingsWindow : Window
     private bool _funcDragging;
     private ActionRow? _dragRow;
     private Point _funcDragStart;
+    private double _funcDragThreshold = 6;
 
     public SettingsWindow(FloatingBarWindow bar)
     {
@@ -241,55 +242,114 @@ public sealed class SettingsWindow : Window
 
     private void AttachFuncDrag()
     {
+        Stylus.SetIsPressAndHoldEnabled(_funcList, false);
+        Stylus.SetIsFlicksEnabled(_funcList, false);
+
         _funcList.PreviewMouseDown += (s, e) =>
         {
             if (e.ChangedButton != MouseButton.Left) return;
-            var src = e.OriginalSource as DependencyObject;
-            if (IsOverInteractive(src)) return;
-            var row = RowFromVisual(src);
-            if (row == null) return;
-            _dragRow = row;
-            _funcDragging = false;
-            _funcDragStart = e.GetPosition(_funcList);
+            if (!FuncDragBegin(e.OriginalSource as DependencyObject, e.GetPosition(_funcList), 6)) return;
             _funcList.CaptureMouse();
             e.Handled = true;
         };
         _funcList.PreviewMouseMove += (s, e) =>
         {
             if (_dragRow == null || !_funcList.IsMouseCaptured || e.LeftButton != MouseButtonState.Pressed) return;
-            var p = e.GetPosition(_funcList);
-            if (!_funcDragging && Math.Abs(p.X - _funcDragStart.X) + Math.Abs(p.Y - _funcDragStart.Y) > 6)
-            {
-                _funcDragging = true;
-                SetRowHighlight(_dragRow, true);
-                Cursor = Cursors.Hand;
-            }
-            if (_funcDragging)
-            {
-                var over = RowFromPoint(p);
-                if (over != null && over != _dragRow)
-                {
-                    _rows.Move(_rows.IndexOf(_dragRow), _rows.IndexOf(over));
-                    SetRowHighlight(_dragRow, true);
-                }
-            }
+            FuncDragMove(e.GetPosition(_funcList));
         };
         _funcList.PreviewMouseUp += (s, e) =>
         {
+            if (_dragRow == null) return;
             if (_funcList.IsMouseCaptured) _funcList.ReleaseMouseCapture();
-            if (_dragRow != null) SetRowHighlight(_dragRow, false);
-            Cursor = Cursors.Arrow;
-            if (_funcDragging) CommitOrder();
-            _dragRow = null;
-            _funcDragging = false;
+            FuncDragEnd();
         };
-        _funcList.LostMouseCapture += (s, e) =>
+        _funcList.LostMouseCapture += (s, e) => FuncDragEnd();
+
+        _funcList.PreviewTouchDown += (s, e) =>
         {
-            if (_dragRow != null) SetRowHighlight(_dragRow, false);
-            Cursor = Cursors.Arrow;
-            _dragRow = null;
-            _funcDragging = false;
+            if (!FuncDragBegin(e.OriginalSource as DependencyObject, e.GetTouchPoint(_funcList).Position, 12)) return;
+            e.TouchDevice.Capture(_funcList);
+            e.Handled = true;
         };
+        _funcList.PreviewTouchMove += (s, e) =>
+        {
+            if (_dragRow == null) return;
+            FuncDragMove(e.GetTouchPoint(_funcList).Position);
+            e.Handled = true;
+        };
+        _funcList.PreviewTouchUp += (s, e) =>
+        {
+            if (_dragRow == null) return;
+            e.TouchDevice.Capture(null);
+            FuncDragEnd();
+            e.Handled = true;
+        };
+        _funcList.LostTouchCapture += (s, e) => FuncDragEnd();
+
+        _funcList.PreviewStylusDown += (s, e) =>
+        {
+            if (e.StylusDevice.TabletDevice.Type != TabletDeviceType.Stylus) return;
+            if (!FuncDragBegin(e.OriginalSource as DependencyObject, e.GetPosition(_funcList), 12)) return;
+            e.StylusDevice.Capture(_funcList);
+            e.Handled = true;
+        };
+        _funcList.PreviewStylusMove += (s, e) =>
+        {
+            if (e.StylusDevice.TabletDevice.Type != TabletDeviceType.Stylus || _dragRow == null) return;
+            FuncDragMove(e.GetPosition(_funcList));
+            e.Handled = true;
+        };
+        _funcList.PreviewStylusUp += (s, e) =>
+        {
+            if (e.StylusDevice.TabletDevice.Type != TabletDeviceType.Stylus || _dragRow == null) return;
+            e.StylusDevice.Capture(null);
+            FuncDragEnd();
+            e.Handled = true;
+        };
+        _funcList.LostStylusCapture += (s, e) => FuncDragEnd();
+    }
+
+    private bool FuncDragBegin(DependencyObject? src, Point p, double threshold)
+    {
+        if (_dragRow != null) return false;
+        if (IsOverInteractive(src)) return false;
+        var row = RowFromVisual(src);
+        if (row == null) return false;
+        _dragRow = row;
+        _funcDragging = false;
+        _funcDragStart = p;
+        _funcDragThreshold = threshold;
+        return true;
+    }
+
+    private void FuncDragMove(Point p)
+    {
+        if (_dragRow == null) return;
+        if (!_funcDragging && Math.Abs(p.X - _funcDragStart.X) + Math.Abs(p.Y - _funcDragStart.Y) > _funcDragThreshold)
+        {
+            _funcDragging = true;
+            SetRowHighlight(_dragRow, true);
+            Cursor = Cursors.Hand;
+        }
+        if (_funcDragging)
+        {
+            var over = RowFromPoint(p);
+            if (over != null && over != _dragRow)
+            {
+                _rows.Move(_rows.IndexOf(_dragRow), _rows.IndexOf(over));
+                SetRowHighlight(_dragRow, true);
+            }
+        }
+    }
+
+    private void FuncDragEnd()
+    {
+        if (_funcList.IsMouseCaptured) _funcList.ReleaseMouseCapture();
+        if (_dragRow != null) SetRowHighlight(_dragRow, false);
+        Cursor = Cursors.Arrow;
+        if (_funcDragging) CommitOrder();
+        _dragRow = null;
+        _funcDragging = false;
     }
 
     private void SetRowHighlight(ActionRow row, bool on)
