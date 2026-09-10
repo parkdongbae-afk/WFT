@@ -1,0 +1,35 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- 라이트 테마 (WFT_UI §2.2) -->
+    <Color x:Key="Color.Bg.Bar">#F6F7F9</Color>
+    <Color x:Key="Color.Bg.Panel">#FFFFFF</Color>
+    <Color x:Key="Color.Bg.Elevated">#EEF0F4</Color>
+    <Color x:Key="Color.Bg.Hover">#E3E6EC</Color>
+    <Color x:Key="Color.Bg.Pressed">#D6DAE2</Color>
+    <Color x:Key="Color.Border">#D1D5DB</Color>
+    <Color x:Key="Color.Fg.Primary">#15171C</Color>
+    <Color x:Key="Color.Fg.Secondary">#5B616E</Color>
+    <Color x:Key="Color.Fg.Disabled">#A5AAB5</Color>
+    <Color x:Key="Color.Accent">#2563EB</Color>
+    <Color x:Key="Color.Accent.Fg">#FFFFFF</Color>
+    <Color x:Key="Color.Success">#1E9E5A</Color>
+    <Color x:Key="Color.Warning">#C47F00</Color>
+    <Color x:Key="Color.Danger">#D93843</Color>
+
+    <SolidColorBrush x:Key="Brush.Bg.Bar" Color="{StaticResource Color.Bg.Bar}"/>
+    <SolidColorBrush x:Key="Brush.Bg.Panel" Color="{StaticResource Color.Bg.Panel}"/>
+    <SolidColorBrush x:Key="Brush.Bg.Elevated" Color="{StaticResource Color.Bg.Elevated}"/>
+    <SolidColorBrush x:Key="Brush.Bg.Hover" Color="{StaticResource Color.Bg.Hover}"/>
+    <SolidColorBrush x:Key="Brush.Bg.Pressed" Color="{StaticResource Color.Bg.Pressed}"/>
+    <SolidColorBrush x:Key="Brush.Border" Color="{StaticResource Color.Border}"/>
+    <SolidColorBrush x:Key="Brush.Fg.Primary" Color="{StaticResource Color.Fg.Primary}"/>
+    <SolidColorBrush x:Key="Brush.Fg.Secondary" Color="{StaticResource Color.Fg.Secondary}"/>
+    <SolidColorBrush x:Key="Brush.Fg.Disabled" Color="{StaticResource Color.Fg.Disabled}"/>
+    <SolidColorBrush x:Key="Brush.Accent" Color="{StaticResource Color.Accent}"/>
+    <SolidColorBrush x:Key="Brush.Accent.Fg" Color="{StaticResource Color.Accent.Fg}"/>
+    <SolidColorBrush x:Key="Brush.Success" Color="{StaticResource Color.Success}"/>
+    <SolidColorBrush x:Key="Brush.Warning" Color="{StaticResource Color.Warning}"/>
+    <SolidColorBrush x:Key="Brush.Danger" Color="{StaticResource Color.Danger}"/>
+
+</ResourceDictionary>

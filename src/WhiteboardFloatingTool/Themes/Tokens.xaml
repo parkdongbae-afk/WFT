@@ -1,0 +1,41 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:sys="clr-namespace:System;assembly=mscorlib">
+
+    <!-- 크기 토큰 (WFT_UI §2.6) -->
+    <sys:Double x:Key="Size.Button">56</sys:Double>
+    <sys:Double x:Key="Size.Icon">24</sys:Double>
+    <sys:Double x:Key="Size.Bar.Padding">4</sys:Double>
+    <CornerRadius x:Key="Radius.S">6</CornerRadius>
+    <CornerRadius x:Key="Radius.M">10</CornerRadius>
+    <CornerRadius x:Key="Radius.L">14</CornerRadius>
+    <sys:Double x:Key="Opacity.Min">0.20</sys:Double>
+    <sys:Double x:Key="Opacity.Default">0.85</sys:Double>
+
+    <FontFamily x:Key="Font.App">Malgun Gothic, Segoe UI</FontFamily>
+
+    <!-- 공통 텍스트 스타일 -->
+    <Style x:Key="Txt.Label" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="12"/>
+        <Setter Property="FontWeight" Value="Medium"/>
+        <Setter Property="Foreground" Value="{DynamicResource Brush.Fg.Secondary}"/>
+        <Setter Property="FontFamily" Value="{StaticResource Font.App}"/>
+        <Setter Property="TextAlignment" Value="Center"/>
+    </Style>
+    <Style x:Key="Txt.Body" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="14"/>
+        <Setter Property="Foreground" Value="{DynamicResource Brush.Fg.Primary}"/>
+        <Setter Property="FontFamily" Value="{StaticResource Font.App}"/>
+        <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
+    </Style>
+    <Style x:Key="Txt.BodySecondary" TargetType="TextBlock" BasedOn="{StaticResource Txt.Body}">
+        <Setter Property="Foreground" Value="{DynamicResource Brush.Fg.Secondary}"/>
+    </Style>
+    <Style x:Key="Txt.Title" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="18"/>
+        <Setter Property="FontWeight" Value="SemiBold"/>
+        <Setter Property="Foreground" Value="{DynamicResource Brush.Fg.Primary}"/>
+        <Setter Property="FontFamily" Value="{StaticResource Font.App}"/>
+    </Style>
+
+</ResourceDictionary>

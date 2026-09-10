@@ -1,0 +1,15 @@
+<Window x:Class="WFT.UI.FloatingBarWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="WFT" Width="64"
+        WindowStyle="None" AllowsTransparency="True" Background="Transparent"
+        ShowInTaskbar="False" ShowActivated="False" Topmost="True"
+        Focusable="False" FocusVisualStyle="{x:Null}"
+        ResizeMode="NoResize" SizeToContent="Height"
+        FontFamily="Malgun Gothic">
+    <Border x:Name="RootBorder" CornerRadius="14" BorderThickness="1"
+            Background="{DynamicResource Brush.Bg.Bar}"
+            BorderBrush="{DynamicResource Brush.Border}">
+        <Grid x:Name="LayoutRoot" Margin="4"/>
+    </Border>
+</Window>

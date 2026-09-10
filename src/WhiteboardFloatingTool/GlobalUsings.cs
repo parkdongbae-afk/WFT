@@ -1,0 +1,9 @@
+global using Application = System.Windows.Application;
+global using Button = System.Windows.Controls.Button;
+global using CheckBox = System.Windows.Controls.CheckBox;
+global using Point = System.Windows.Point;
+global using MouseEventArgs = System.Windows.Input.MouseEventArgs;
+global using MessageBox = System.Windows.MessageBox;
+global using MessageBoxImage = System.Windows.MessageBoxImage;
+global using MessageBoxButton = System.Windows.MessageBoxButton;
+global using Screen = System.Windows.Forms.Screen;
